@@ -1,3 +1,4 @@
+# %load kaggle/working/FPTrans/config.py
 import os
 import sys
 import random
@@ -71,7 +72,7 @@ def setup(ex):
 
         # Training configurations  ============================================================
         epochs = 60                     # int, Number of total epochs for training
-        lr = 0.001                      # float, Base learning rate for model training
+        lr = 0.00001                      # float, Base learning rate for model training
         lrp = "period_step"             # str, Learning rate policy [custom_step/period_step/plateau]
         if lrp == "custom_step":
             lr_boundaries = []          # list, [custom_step] Use the specified lr at the given boundaries

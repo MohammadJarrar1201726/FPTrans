@@ -1,3 +1,4 @@
+# %load kaggle/working/FPTrans/run.py
 from pathlib import Path
 
 import numpy as np
@@ -18,14 +19,39 @@ ex = setup(
 )
 torch.set_printoptions(precision=8)
 
+# class Evaluator(BaseEvaluator):
+#     def test_step(self, batch, step):
+#         sup_rgb = batch['sup_rgb'].cuda()
+#         sup_msk = batch['sup_msk'].cuda()
+#         qry_rgb = batch['qry_rgb'].cuda()
+#         qry_msk = batch['qry_msk'].cuda()
+#         classes = batch['cls'].cuda()
+
+#         output = self.model_DP(qry_rgb, sup_rgb, sup_msk, qry_msk)
+#         qry_pred = output['out']
+
+#         # Compute loss
+#         loss = self.loss_obj(qry_pred, qry_msk.squeeze(1))
+
+#         # Compute prediction
+#         qry_pred = qry_pred.argmax(dim=1).detach().cpu().numpy()
+#         return qry_pred, {'loss': loss.item()}
+import numpy as np
+from PIL import Image
+from pathlib import Path
+import torch
+
 class Evaluator(BaseEvaluator):
     def test_step(self, batch, step):
+        # Extract inputs from batch
         sup_rgb = batch['sup_rgb'].cuda()
         sup_msk = batch['sup_msk'].cuda()
         qry_rgb = batch['qry_rgb'].cuda()
         qry_msk = batch['qry_msk'].cuda()
+        qry_name = batch['qry_names']  # Single query image name
         classes = batch['cls'].cuda()
 
+        # Forward pass
         output = self.model_DP(qry_rgb, sup_rgb, sup_msk, qry_msk)
         qry_pred = output['out']
 
@@ -34,9 +60,36 @@ class Evaluator(BaseEvaluator):
 
         # Compute prediction
         qry_pred = qry_pred.argmax(dim=1).detach().cpu().numpy()
+
+        # Save binary predicted mask to file if output directory is specified
+        if hasattr(self.opt, 'p') and hasattr(self.opt.p, 'out') and self.opt.p.out:
+            # Create output directory if it doesn't exist
+            out_dir = Path(self.opt.p.out)
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            # Ensure qry_name is a string or a single-item list/tuple
+            if isinstance(qry_name, (list, tuple)):
+                if len(qry_name) != 1:
+                    raise ValueError("Expected a single query name, got multiple: {qry_name}")
+                qry_name = qry_name[0][0]
+            if not isinstance(qry_name, str):
+                raise ValueError("batch['qry_names'] must be a string or a single-item list/tuple of a string")
+
+            # Process the single prediction
+            pred = qry_pred[0].astype(np.uint8) * 255  # Binary mask (0 or 255)
+
+            # Use query image name with _pred suffix
+            out_name = Path(qry_name).stem + '_pred.png'
+            out_path = out_dir / out_name
+
+            # Save as grayscale binary mask
+            Image.fromarray(pred).convert('L').save(out_path)
+
+        # Clean up memory
+        del output
+        torch.cuda.empty_cache()
+
         return qry_pred, {'loss': loss.item()}
-
-
 class Trainer(BaseTrainer):
     def _train_step(self, batch, step, epoch):
         sup_rgb = batch['sup_rgb'].cuda()
@@ -83,11 +136,13 @@ def train(_run, _config):
 
     ds_train, data_loader, _ = datasets.load(opt, logger, "train")
     ds_eval_online, data_loader_val, num_classes = datasets.load(opt, logger, "eval_online")
+    
     logger.info(f'     ==> {len(ds_train)} training samples')
     logger.info(f'     ==> {len(ds_eval_online)} eval_online samples')
 
     model = load_model(opt, logger)
     if opt.exp_id >= 0 or opt.ckpt:
+        
         ckpt = misc.find_snapshot(_run.run_dir.parent, opt.exp_id, opt.ckpt, afs=on_cloud)
         model.load_weights(ckpt, logger, strict=opt.strict)
 
@@ -108,6 +163,7 @@ def test(_run, _config, exp_id=-1, ckpt=None, strict=True, eval_after_train=Fals
     opt, logger, device = init_environment(ex, _run, _config, eval_after_train=eval_after_train)
 
     ds_test, data_loader, num_classes = datasets.load(opt, logger, "test")
+    
     logger.info(f'     ==> {len(ds_test)} testing samples')
 
     model = load_model(opt, logger)
@@ -120,9 +176,9 @@ def test(_run, _config, exp_id=-1, ckpt=None, strict=True, eval_after_train=Fals
     tester = Evaluator(opt, logger, device, model, None, "EVAL")
 
     logger.info("Start testing.")
-    loss, mean_iou, binary_iou, _, _ = tester.start_eval_loop(data_loader, num_classes)
+    loss, mean_iou, binary_iou, _, _ , catch_rate , yeild_rate = tester.start_eval_loop(data_loader, num_classes)
 
-    return f"Loss: {loss:.4f}, mIoU: {mean_iou * 100:.2f}, bIoU: {binary_iou * 100:.2f}"
+    return f"Loss: {loss:.4f}, mIoU: {mean_iou * 100:.2f}, bIoU: {binary_iou * 100:.2f} , catch_rate:{catch_rate * 100:.2f}, yeild_rate: {yeild_rate* 100:.2f}"
 
 
 @ex.command(unobserved=True)
@@ -150,7 +206,7 @@ def predict(_run, _config, exp_id=-1, ckpt=None, strict=True):
         qry_rgb_i = qry_rgb[i:i + 1]
         qry_msk_i = qry_msk[i:i + 1] if qry_msk is not None else None
         qry_ori_i = qry_ori[i]
-
+        
         output = model(qry_rgb_i, sup_rgb, sup_msk, out_shape=qry_ori_i.shape[-3:-1])
         pred = output['out'].argmax(dim=1).detach().cpu().numpy()
 
@@ -171,7 +227,9 @@ def predict(_run, _config, exp_id=-1, ckpt=None, strict=True):
             pred = pred[0].astype(np.uint8) * 255
             if opt.p.overlap:
                 out = qry_ori_i.copy()
-                out[pred == 255] = out[pred == 255] * 0.5 + np.array([255, 0, 0]) * 0.5
+                # out[pred == 255] = out[pred == 255] * 0.5 + np.array([255, 0, 0]) * 0.5
+                pred[pred == 255] = 1  # Ensure consistency
+                out[pred == 1] = out[pred == 1] * 0.5 + np.array([255, 0, 0]) * 0.5
             else:
                 out = pred
 

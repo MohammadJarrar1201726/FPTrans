@@ -7,10 +7,16 @@ from constants import data_dir, lists_dir
 from data_kits import transformation as tf
 from data_kits import voc_coco as pfe
 from utils_.misc import load_image
+from data_kits.binary_dataset import BinarySegmentationDataset
+import data_kits.transformation as tf
+from constants import MEAN, STD
+
 
 DATA_DIR = {
     "PASCAL": data_dir / "VOCdevkit/VOC2012",
     "COCO": data_dir / "COCO",
+    "VISION24": data_dir / "VISION24",
+     
 }
 DATA_LIST = {
     "PASCAL": {
@@ -23,29 +29,50 @@ DATA_LIST = {
         "test": lists_dir / "coco/val_data_list.txt",
         "eval_online": lists_dir / "coco/val_data_list.txt"
     },
+    "VISION24": {
+        "train": lists_dir / "vision24/train.txt",
+        "test": lists_dir / "vision24/test.txt",
+        "eval_online": lists_dir / "vision24/test.txt"
+    },
+    
 }
+
+
 MEAN = [0.485, 0.456, 0.406]    # list, normalization mean in data preprocessing
 STD = [0.229, 0.224, 0.225]     # list, normalization std in data preprocessing
 
 
 def get_train_transforms(opt, height, width):
-    supp_transform = tf.Compose([tf.RandomResize(opt.scale_min, opt.scale_max),
-                                 tf.RandomRotate(opt.rotate, pad_type=opt.pad_type),
-                                 tf.RandomGaussianBlur(),
-                                 tf.RandomHorizontallyFlip(),
-                                 tf.RandomCrop(height, width, check=True, center=True, pad_type=opt.pad_type),
-                                 tf.ToTensor(mask_dtype='float'),   # support mask using float
-                                 tf.Normalize(MEAN, STD)], processer=opt.proc)
+    """
+    Exact implementation of Algorithm 1 from the Dinnar report.
+    """
+    supp_transform = tf.Compose([
+        # 1) Deterministic resize to (height, width)
+        tf.Resize(height, width),
+        # 2) ColorJitter with 50% chance
+        tf.ColorJitter(brightness=0.4, contrast=0.4,
+                       saturation=0.4, hue=0.1, p=0.5),
+        # 3) Grayscale with 20% chance
+        tf.RandomGrayscale(p=0.2),
+        # 4) GaussianBlur with 50% chance
+        tf.RandomGaussianBlur(kernel_size=3, sigma=0.5, p=0.5),
+        # 5) ToTensor & Normalize
+        tf.ToTensor(mask_dtype='float'),
+        tf.Normalize(MEAN, STD),
+    ], processer=opt.proc)
 
-    query_transform = tf.Compose([tf.RandomResize(opt.scale_min, opt.scale_max),
-                                  tf.RandomRotate(opt.rotate, pad_type=opt.pad_type),
-                                  tf.RandomGaussianBlur(),
-                                  tf.RandomHorizontallyFlip(),
-                                  tf.RandomCrop(height, width, check=True, center=True, pad_type=opt.pad_type),
-                                  tf.ToTensor(mask_dtype='long'),   # query mask using long
-                                  tf.Normalize(MEAN, STD)], processer=opt.proc)
+    query_transform = tf.Compose([
+        tf.Resize(height, width),
+        tf.ColorJitter(brightness=0.4, contrast=0.4,
+                       saturation=0.4, hue=0.1, p=0.5),
+        tf.RandomGrayscale(p=0.2),
+        tf.RandomGaussianBlur(kernel_size=3, sigma=0.5, p=0.5),
+        tf.ToTensor(mask_dtype='long'),
+        tf.Normalize(MEAN, STD),
+    ], processer=opt.proc)
 
     return supp_transform, query_transform
+
 
 
 def get_val_transforms(opt, height, width):
@@ -77,8 +104,11 @@ def load(opt, logger, mode):
     elif opt.dataset == "COCO":
         num_classes = 80
         cache = False
+    elif opt.dataset == "VISION24":
+        num_classes = 12
+        cache = False
     else:
-        raise ValueError(f'Not supported dataset: {opt.dataset}. [PASCAL|COCO]')
+        raise ValueError(f'Not supported dataset: {opt.dataset}. [PASCAL|COCO | VISION24]')
 
     dataset = pfe.SemData(opt, split, shot, query,
                           data_root=DATA_DIR[opt.dataset],
@@ -92,7 +122,7 @@ def load(opt, logger, mode):
                             shuffle=True if mode == 'train' else False,
                             num_workers=opt.num_workers,
                             pin_memory=True,
-                            drop_last=True if mode == 'train' else False)
+                            drop_last=True if mode == 'train' else False )
 
     logger.info(' ' * 5 + f"==> Data loader {opt.dataset} for {mode}")
     return dataset, dataloader, num_classes
@@ -118,8 +148,11 @@ def get_val_labels(opt, mode):
         if opt.use_split_coco:
             return list(range(opt.split + 1, 81, 4))
         return list(range(opt.split * 20 + 1, opt.split * 20 + 21))
+    elif opt.dataset == "VISION24":
+        # return list(range(opt.split + 1, 6))
+        return [i for i in range(0 , 13)]
     else:
-        raise ValueError(f'Only support datasets [PASCAL|COCO], got {opt.dataset}')
+        raise ValueError(f'Only support datasets [PASCAL|COCO|VISION24], got {opt.dataset}')
 
 
 def load_p(opt, device):

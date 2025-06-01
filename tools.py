@@ -1,3 +1,4 @@
+# %load kaggle/working/FPTrans/tools.py
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,7 @@ from scipy.ndimage import distance_transform_edt
 import cv2
 
 from config import MapConfig
+from data_kits.voc_coco import SemData
 from data_kits.datasets import DATA_DIR, DATA_LIST
 from utils_.misc import load_image
 
@@ -52,7 +54,7 @@ def precompute_loss_weights(_config):
     ----------
     _config: ReadOnlyDict
         dataset: str
-            Name of the dataset. [PASCAL|COCO]
+            Name of the dataset. [PASCAL|COCO | VISION24 ]
         save_bytes: bool
             Save weights in float32 or byte. It should be set as True when generating
             for COCO. Default value is False.
@@ -63,6 +65,7 @@ def precompute_loss_weights(_config):
     -----
     cuda 0 python tools.py precompute_loss_weights with dataset=PASCAL
     cuda 0 python tools.py precompute_loss_weights with dataset=COCO save_bytes=True
+    cuda 0 python tools.py precompute_loss_weights with dataset=VISION24
 
     """
     opt = MapConfig(_config)
@@ -74,7 +77,15 @@ def precompute_loss_weights(_config):
     kernel = torch.ones(1, 1, 3, 3, dtype=torch.float).cuda()
 
     data_list = DATA_LIST[opt.dataset]['train']
+
     label_paths = [x.split()[1] for x in data_list.read_text().splitlines()]
+
+    #for vision24
+    all_labels = {}
+    if(opt.dataset== "VISION24"):
+        all_labels = {str(data_dir/(x.split()[1])):SemData.class_names['vision24'].index(x.split()[2]) for x in data_list.read_text().splitlines()}
+    
+
     gen = tqdm(label_paths)
     for lab_path in gen:
         save_file = save_dir / Path(lab_path).stem
@@ -87,16 +98,23 @@ def precompute_loss_weights(_config):
 
         lab_path = data_dir / lab_path
         label = load_image(lab_path, 'lab', opt.proc)
-        unique_labels = np.unique(label).tolist()
-
+        
+        if(opt.dataset!= "VISION24"):
+            unique_labels = np.unique(label).tolist()
+            unique_labels = [1 if x == 255 else x for x in unique_labels]
+        else:
+            unique_labels = all_labels[str(lab_path)]
+            unique_labels = np.unique(unique_labels).tolist()
+                      
         for cls in unique_labels:
-            if cls == 255:
+            if cls == 255 :
                 continue
             classes.append(cls)
             all_class_edts.append(boundary2weight(label, cls, kernel, opt.sigma))
 
         classes = np.array(classes)
         edt = np.stack(all_class_edts, axis=0)
+        
         if opt.save_byte:
             edt = (edt * 255).astype('uint8')
 

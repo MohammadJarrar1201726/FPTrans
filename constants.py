@@ -4,6 +4,8 @@ from pathlib import Path
 project_dir = Path(__file__).parent
 data_dir = project_dir / "data"
 lists_dir = project_dir / "lists"
+MEAN = (0.485, 0.456, 0.406)
+STD  = (0.229, 0.224, 0.225)
 
 if 'RUN_POSITION' in os.environ and os.environ['RUN_POSITION'] == 'paddlecloud':
     on_cloud = True

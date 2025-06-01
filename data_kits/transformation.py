@@ -35,6 +35,7 @@ class Compose(object):
     def __call__(self, image, label, **kwargs):
         if self.processer == 'cv2':
             image = np.float32(image)
+            label[label == 255] = 1  # Convert 255 to 1
             label = np.uint8(label)
         for t in self.transforms:
             image, label, kwargs = t(image, label, proc=self.processer, **kwargs)
@@ -106,6 +107,7 @@ class ToTensor(object):
         ).float().div(255)
 
         mask = torch.from_numpy(np.array(mask, np.uint8))
+        mask[mask == 255] = 1  # Convert 255 to 1
         if self.mask_dtype == 'long':
             mask = mask.long()
         elif self.mask_dtype == 'float':
@@ -154,19 +156,27 @@ class ColorJitter(object):
 
 
 class RandomGaussianBlur(object):
-    def __init__(self, radius=5, rand_radius=False):
-        self.radius = radius
+    def __init__(self, kernel_size=3, sigma=0.5, p=0.5, rand_radius=False):
+        self.kernel_size = kernel_size  # used in OpenCV
+        self.sigma = sigma              # used in PIL (as radius)
+        self.p = p
         self.rand_radius = rand_radius
 
     def __call__(self, img, mask, proc='pil', **kwargs):
-        if random.random() < 0.5:
+        if random.random() < self.p:
             if proc == 'pil':
-                img = img.filter(ImageFilter.GaussianBlur(self.radius))
+                img = img.filter(ImageFilter.GaussianBlur(self.sigma))
             else:
-                radius = random.choice([self.radius, self.radius - 2, self.radius + 2]) if self.rand_radius else self.radius
-                img = cv2.GaussianBlur(img, (radius, radius), 0)
+                # OpenCV expects odd kernel size
+                k = self.kernel_size
+                if self.rand_radius:
+                    k = random.choice([k, max(k - 2, 1), k + 2])
+                if k % 2 == 0:
+                    k += 1  # must be odd
+                img = cv2.GaussianBlur(img, (k, k), self.sigma)
 
         return img, mask, kwargs
+
 
 
 class RandomCrop(object):
@@ -275,6 +285,7 @@ class RandomCrop(object):
                 # foreground pixels
                 np_raw_mask = np.array(raw_mask, np.uint8)
                 np_mask = np.array(mask, np.uint8)
+                np_mask[np_mask == 255] = 1  # Convert 255 to 1
                 raw_pos_num = np.sum(np_raw_mask == 1)
                 pos_num = np.sum(np_mask == 1)
                 crop_iter = 0
@@ -432,3 +443,19 @@ class RandomRotate(object):
         
         return img, mask, kwargs
 
+
+class RandomGrayscale:
+    def __init__(self, p=0.2):
+        self.p = p
+
+    def __call__(self, image, mask, proc='pil', **kwargs):
+        if random.random() < self.p:
+            if isinstance(image, np.ndarray):
+                # First clip to [0, 1] or [0, 255] range, then convert to uint8
+                if image.dtype != np.uint8:
+                    image = np.clip(image, 0, 1)
+                    image = (image * 255).astype(np.uint8)
+                image = Image.fromarray(image)
+            image = tf.rgb_to_grayscale(image, num_output_channels=3)
+            image = np.array(image)
+        return image, mask, kwargs

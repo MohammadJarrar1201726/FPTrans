@@ -1,3 +1,4 @@
+# %load kaggle/working/FPTrans/networks/FPTrans.py
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -305,30 +306,150 @@ class FPTrans(nn.Module):
 
         return pred
 
-    def load_weights(self, ckpt_path, logger, strict=True):
-        """
+    # def load_weights(self, ckpt_path, logger, strict=True):
+    #     """
 
-        Parameters
-        ----------
-        ckpt_path: Path
-            path to the checkpoint
-        logger
-        strict: bool
-            strict mode or not
+    #     Parameters
+    #     ----------
+    #     ckpt_path: Path
+    #         path to the checkpoint
+    #     logger
+    #     strict: bool
+    #         strict mode or not
 
-        """
-        weights = torch.load(str(ckpt_path), map_location='cpu')
+    #     """
+    #     weights = torch.load(str(ckpt_path), map_location='cpu' , weights_only=False)
+    #     if "model_state" in weights:
+    #         weights = weights["model_state"]
+    #     if "state_dict" in weights:
+    #         weights = weights["state_dict"]
+    #     weights = {k.replace("module.", ""): v for k, v in weights.items()}
+    #     # Update with original_encoder
+    #     weights.update({k: v for k, v in self.state_dict().items() if 'original_encoder' in k})
+
+    #     self.load_state_dict(weights, strict=strict)        
+    #     logger.info(' ' * 5 + f"==> Model {self.__class__.__name__} initialized from {ckpt_path}")
+
+    # def load_weights(self, ckpt_path, logger, strict=False):
+    #   """
+    #   Load weights from a checkpoint, handling unexpected keys and size mismatches.
+
+    #   Parameters
+    #   ----------
+    #   ckpt_path: Path
+    #       Path to the checkpoint file.
+    #   logger:
+    #       Logger instance for logging messages.
+    #   strict: bool
+    #       Whether to enforce strict loading (default: False).
+    #   """
+    #   # Load checkpoint weights
+    #   weights = torch.load(str(ckpt_path), map_location='cpu' , weights_only=False)
+    #   if "model_state" in weights:
+    #       weights = weights["model_state"]
+    #   if "state_dict" in weights:
+    #       weights = weights["state_dict"]
+    #   weights = {k.replace("module.", ""): v for k, v in weights.items()}
+
+    #   # Get model’s state_dict for comparison
+    #   model_state_dict = self.state_dict()
+
+    #   # Filter weights to only include keys present in the model
+    #   weights = {k: v for k, v in weights.items() if k in model_state_dict}
+
+    #   # Handle size mismatches
+    #   for key in weights:
+    #       if weights[key].shape != model_state_dict[key].shape:
+    #           if key == 'encoder.backbone.prompt_tokens':
+    #               ckpt_shape = weights[key].shape  # [90, 12, 768]
+    #               model_shape = model_state_dict[key].shape  # [360, 12, 768]
+    #               if ckpt_shape[1:] == model_shape[1:]:  # Check if heads and embed_dim match
+    #                   num_tokens_ckpt = ckpt_shape[0]
+    #                   num_tokens_model = model_shape[0]
+    #                   if num_tokens_model % num_tokens_ckpt == 0:
+    #                       repeat_times = num_tokens_model // num_tokens_ckpt
+    #                       weights[key] = weights[key].repeat(repeat_times, 1, 1)
+    #                       logger.info(f"Adjusted prompt_tokens from {ckpt_shape} to {model_shape} by repeating.")
+    #                   else:
+    #                       logger.warning(f"Cannot adjust prompt_tokens: {ckpt_shape} to {model_shape} not evenly divisible.")
+    #               else:
+    #                   logger.warning(f"Shape mismatch for {key}: {ckpt_shape} vs {model_shape}")
+    #           elif key == 'encoder.backbone.pos_embed':
+    #               ckpt_shape = weights[key].shape  # [1, 902, 768]
+    #               model_shape = model_state_dict[key].shape  # [1, 578, 768]
+    #               if ckpt_shape[0] == model_shape[0] and ckpt_shape[2] == model_shape[2]:
+    #                   # Separate class token, patch embeddings, and dist token
+    #                   class_token = weights[key][:, :1, :]  # [1, 1, 768]
+    #                   dist_token = weights[key][:, -1:, :]  # [1, 1, 768]
+    #                   patch_embeds = weights[key][:, 1:-1, :]  # [1, 900, 768]
+    #                   num_patches_ckpt = patch_embeds.shape[1]
+    #                   num_patches_model = model_shape[1] - 2  # 576
+
+    #                   # Compute grid sizes (assuming square patch grid)
+    #                   grid_size_ckpt = int(round(num_patches_ckpt ** 0.5))  # e.g., 30
+    #                   grid_size_model = int(round(num_patches_model ** 0.5))  # 24
+    #                   if grid_size_ckpt ** 2 == num_patches_ckpt and grid_size_model ** 2 == num_patches_model:
+    #                       # Reshape to [1, embed_dim, grid_size, grid_size] for interpolation
+    #                       patch_embeds = patch_embeds.permute(0, 2, 1).reshape(1, -1, grid_size_ckpt, grid_size_ckpt)
+    #                       # Interpolate to model grid size
+    #                       patch_embeds = F.interpolate(patch_embeds, size=(grid_size_model, grid_size_model), 
+    #                                                   mode='bilinear', align_corners=False)
+    #                       # Reshape back to [1, num_patches_model, embed_dim]
+    #                       patch_embeds = patch_embeds.reshape(1, -1, num_patches_model).permute(0, 2, 1)
+    #                       # Reassemble pos_embed
+    #                       weights[key] = torch.cat([class_token, patch_embeds, dist_token], dim=1)
+    #                       logger.info(f"Interpolated pos_embed from {ckpt_shape} to {model_shape}.")
+    #                   else:
+    #                       logger.warning(f"Cannot interpolate pos_embed: non-square grid detected.")
+    #               else:
+    #                   logger.warning(f"Shape mismatch for {key}: {ckpt_shape} vs {model_shape}")
+    #           else:
+    #               logger.warning(f"Size mismatch for {key}: {weights[key].shape} vs {model_state_dict[key].shape}")
+
+    #   # Load the adjusted weights
+    #   self.load_state_dict(weights, strict=strict)
+    #   logger.info(' ' * 5 + f"==> Model {self.__class__.__name__} initialized from {ckpt_path}")
+    def load_weights(self, ckpt_path, logger, strict=False):
+        import torch
+        from networks import vit  # Ensure resize_pos_embed is available
+    
+        # Load the checkpoint
+        weights = torch.load(ckpt_path, map_location='cpu', weights_only=False)
         if "model_state" in weights:
             weights = weights["model_state"]
         if "state_dict" in weights:
             weights = weights["state_dict"]
         weights = {k.replace("module.", ""): v for k, v in weights.items()}
-        # Update with original_encoder
-        weights.update({k: v for k, v in self.state_dict().items() if 'original_encoder' in k})
-
-        self.load_state_dict(weights, strict=strict)        
-        logger.info(' ' * 5 + f"==> Model {self.__class__.__name__} initialized from {ckpt_path}")
-
+    
+        # Get the model's state dictionary
+        model_state_dict = self.state_dict()
+    
+        # Resize pos_embed if necessary
+        if 'encoder.backbone.pos_embed' in weights:
+            pos_embed_ckpt = weights['encoder.backbone.pos_embed']
+            pos_embed_model = model_state_dict['encoder.backbone.pos_embed']
+            if pos_embed_ckpt.shape != pos_embed_model.shape:
+                gs_new = self.encoder.backbone.patch_embed.grid_size  # e.g., (24, 24)
+                num_tokens_model = self.encoder.backbone.num_tokens  # e.g., 2
+                weights['encoder.backbone.pos_embed'] = vit.resize_pos_embed(
+                    pos_embed_ckpt, pos_embed_model, num_tokens_model, gs_new
+                )
+                logger.info(f"Resized pos_embed from {pos_embed_ckpt.shape} to {pos_embed_model.shape}")
+    
+        # Filter weights to only include keys that match the model’s state_dict in both name and shape
+        filtered_weights = {
+            k: v for k, v in weights.items()
+            if k in model_state_dict and v.shape == model_state_dict[k].shape
+        }
+    
+        # Load the filtered weights with strict=False
+        missing_keys, unexpected_keys = self.load_state_dict(filtered_weights, strict=False)
+        if missing_keys:
+            logger.info(f"Missing keys (ignored): {missing_keys}")
+        if unexpected_keys:
+            logger.info(f"Unexpected keys (ignored): {unexpected_keys}")
+    
+        logger.info(f"==> Model {self.__class__.__name__} initialized from {ckpt_path}")
     @staticmethod
     def get_or_download_pretrained(backbone, progress):
         if backbone not in pretrained_weights:
@@ -352,3 +473,4 @@ class FPTrans(nn.Module):
             if var.requires_grad:
                 params.append(var)
         return [{'params': params}]
+

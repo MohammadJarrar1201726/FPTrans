@@ -1,3 +1,4 @@
+# %load kaggle/working/FPTrans/core/base_trainer.py
 import os
 import random
 import shutil
@@ -132,7 +133,7 @@ class BaseEvaluator(object):
                 qry_pred, losses = self.test_step(batch, i)
                 accu.update(**losses)
             self.maybe_print_metrics(accu, gen, epoch)
-            fs_metric.update(qry_pred, batch['qry_msk'], batch['cls'])
+            fs_metric.update(qry_pred, batch['qry_msk'], batch['cls'],verbose =0 )
 
             # save prediction
             if save_dir:
@@ -150,8 +151,8 @@ class BaseEvaluator(object):
                         save_img(save_path, r)
             data_timer.tic()
 
-        miou_class, miou_avg = fs_metric.get_scores(val_labels)
-        biou_class, biou_avg = fs_metric.get_scores(val_labels, binary=True)
+        miou_class, miou_avg , catch_rate , yeild_rate = fs_metric.get_scores(val_labels)
+        biou_class, biou_avg , _ , _ = fs_metric.get_scores(val_labels, binary=True)
         str1 = f'mIoU mean: {round_(miou_class * 100)} ==> {round_(miou_avg * 100)}'
         str2 = f'bIoU mean: {round_(biou_class * 100)} ==> {round_(biou_avg * 100)}'
 
@@ -167,7 +168,7 @@ class BaseEvaluator(object):
             self.logger.info('│' + pad(str3, ' ', max_length) + '│')
             self.logger.info('╘' + pad('', '═', max_length) + '╛')
 
-        return accu.mean('loss'), miou_avg, biou_avg, timer.elapsed, data_timer.elapsed
+        return accu.mean('loss'), miou_avg, biou_avg, timer.elapsed, data_timer.elapsed , catch_rate, yeild_rate
 
 
 class BaseTrainer(object):
@@ -200,7 +201,7 @@ class BaseTrainer(object):
         self.best_iou = -1.
         self.template = "[{:d}/{:d}]" + \
                         " | Tr {:6.4f} | Val {:6.4f} | mIoU {:5.2f} | bIoU {:5.2f}" + \
-                        " | DATA {:s} | OPT {:s} | ETA {:s}"
+                        " | DATA {:s} | OPT {:s} | ETA {:s} | Catch Rate {:5.2f} | Yeild Rate {:5.2f}"
 
         self.loss_names = 'loss prompt pair'.split()
         self.steps_per_epoch = len(self.data_loader)
@@ -270,6 +271,17 @@ class BaseTrainer(object):
 
         for epoch in range(start_epoch, self.opt.epochs + 1):
             self.print_lr()
+            
+            # Load previous epoch weights if available
+            # if(self.opt.dataset == "VISION24"):
+            #     checkpoint_path = os.path.join("vision24", f"epoch_{epoch-1}.pth")
+            #     if os.path.exists(checkpoint_path):
+            #         print(f"Loading weights from {checkpoint_path}...")
+            #         checkpoint = torch.load(checkpoint_path)
+            #         self.model.load_state_dict(checkpoint['model_state_dict'])
+            #         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            #         accu.update(**checkpoint['accu'])  # Restore accumulated loss
+            
 
             # 1. Training
             self.model.train()
@@ -290,12 +302,24 @@ class BaseTrainer(object):
 
             # 2. Evaluation
             if self.opt.ckpt_interval > 0 and epoch % self.opt.ckpt_interval == 0 or epoch == self.opt.epochs:
-                mloss, miou, biou, val_elapsed, val_data_elapsed = evaluator.start_eval_loop(self.data_loader_val, num_classes, epoch)
+                mloss, miou, biou, val_elapsed, val_data_elapsed , catch_rate ,yeild_rate = evaluator.start_eval_loop(self.data_loader_val, num_classes, epoch)
                 best = self.snapshot(epoch, miou, biou)
                 
                 data_time = data_timer.elapsed + val_data_elapsed
                 epoch_time = timer.elapsed + val_elapsed
-                self.log_result(epoch, accu, mloss, miou, biou, best, epoch_time, data_time)
+                self.log_result(epoch, accu, mloss, miou, biou, best, epoch_time, data_time , catch_rate , yeild_rate)
+                
+            # Save model checkpoint after every epoch
+            # if(self.opt.dataset == "VISION24"):
+            #     checkpoint_path = os.path.join('vision24', f"epoch_{epoch}.pth")
+            #     torch.save({
+            #         'epoch': epoch,
+            #         'model_state_dict': self.model.state_dict(),
+            #         'optimizer_state_dict': self.optimizer.state_dict(),
+            #         'accu': accu.get(),  # Save accumulated loss
+            #     }, checkpoint_path)
+
+            #     print(f"Checkpoint saved: {checkpoint_path}")
 
             # 3. Prepare for next epoch
             timer.reset()
@@ -382,7 +406,7 @@ class BaseTrainer(object):
                     print(e)
         return best
 
-    def log_result(self, epoch, accu, val_loss, val_mIoU, val_bIoU, best, epoch_time, data_time, **kwargs):
+    def log_result(self, epoch, accu, val_loss, val_mIoU, val_bIoU, best, epoch_time, data_time , catch_rate , yeild_rate, **kwargs):
         # Log epoch summary to the terminal
         losses = accu.mean('loss')
         log_str = self.template.format(
@@ -394,7 +418,10 @@ class BaseTrainer(object):
             val_bIoU * 100, 
             self.second2str(data_time),
             self.second2str(epoch_time),
-            self.second2str((self.opt.epochs - epoch) * epoch_time)
+            self.second2str((self.opt.epochs - epoch) * epoch_time),
+            catch_rate * 100,
+            yeild_rate * 100
+            
         ) + " | (best)" * best
         self.logger.info(log_str)
         self.logger.info(CC.c(f"[{epoch}/{self.opt.epochs}] Best mIoU until now: {self.best_iou * 100:.2f}\n", CC.OKGREEN))

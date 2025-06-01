@@ -668,4 +668,3 @@ def vit_model(model_type,
                              logger=logger,
                              original=original)
 
-

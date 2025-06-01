@@ -1,3 +1,4 @@
+# %load  kaggle/working/FPTrans/data_kits/tcp_few_shot.py
 from pathlib import Path
 
 import numpy as np
@@ -55,6 +56,7 @@ class TCPFewShot(Dataset):
     def seg_encode(self, lab, cls, ignore_lab):
         if self.opt.proc == 'pil':
             lab = np.array(lab, np.uint8)
+            lab[lab == 255] = 1  # Convert 255 to 1
         if len(lab.shape) == 3:
             lab = lab[:, :, -1]
         assert len(lab.shape) == 2, lab.shape
@@ -82,6 +84,7 @@ class TCPFewShot(Dataset):
         else:
             lab = load_image(data_dir / name, 'lab', self.opt.proc)
         lab = self.seg_encode(lab, cls, ignore_lab)
+        lab[lab == 255] = 1  # Convert 255 to 1
         return lab
 
     def __getitem__(self, index):
