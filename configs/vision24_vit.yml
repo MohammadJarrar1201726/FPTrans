@@ -2,13 +2,13 @@
 dataset: VISION24
 backbone: DeiT-B/16-384
 vit_depth: 12
-epochs: 60
+epochs: 30
 lr: 0.00001
 bs: 16
 # train_n: 1000
-train_n: 50
-test_n : 7182          
-#lrp: cosine                     
+train_n: 3000
+test_n: 7182
+#lrp: cosine
 # train_n: 200
 # test_n: 100
 # log_dir: "vision24"
@@ -17,129 +17,68 @@ bg_num: 1
 scale_min: 0.6
 scale_max: 1.4
 pair_lossW: 0.001
+loss: pairwise  # Added to specify pairwise loss
 height: 448
 width: 448
 optim: "adam"
-shot: 1  
+shot: 1
 split: 0     # Dataset split to use
 
 # p:
 # #Screw_front
-#   sup_rgb: ["./data/VISION24/JPEGImages/001757.jpg",
-           
-#            ]
-#   sup_msk: ["./data/VISION24/SegmentationClassAug/001757.png",
-            
-             
-#            ]
+#   sup_rgb: ["./data/VISION24/JPEGImages/001757.jpg"]
+#   sup_msk: ["./data/VISION24/SegmentationClassAug/001757.png"]
 #   qry_rgb: ["./data/VISION24/JPEGImages/000432.jpg",
-#            "./data/VISION24/JPEGImages/000874.jpg",
+#             "./data/VISION24/JPEGImages/000874.jpg",
 #             "./data/VISION24/JPEGImages/000114.jpg",
-#             "./data/VISION24/JPEGImages/000860.jpg",
-        
-            
-            
-            
-            
-#            ]
+#             "./data/VISION24/JPEGImages/000860.jpg"]
 
 # p:
 # #Cylinder_Porosity
-
-#   sup_rgb: ["./data/VISION24/JPEGImages/000723.jpg",
-           
-#            ]
-#   sup_msk: ["./data/VISION24/SegmentationClassAug/000723.png",
-            
-             
-#            ]
+#   sup_rgb: ["./data/VISION24/JPEGImages/000723.jpg"]
+#   sup_msk: ["./data/VISION24/SegmentationClassAug/000723.png"]
 #   qry_rgb: ["./data/VISION24/JPEGImages/000756.jpg",
-#            "./data/VISION24/JPEGImages/000742.jpg",
+#             "./data/VISION24/JPEGImages/000742.jpg",
 #             "./data/VISION24/JPEGImages/000772.jpg",
-#             "./data/VISION24/JPEGImages/000690.jpg",
-        
-            
-            
-            
-            
-#            ]
-#   out: results/
-
-
+#             "./data/VISION24/JPEGImages/000690.jpg"]
 
 # p:
-# #Wood 
-
-#   sup_rgb: ["./data/VISION24/JPEGImages/000377.jpg",
-           
-#            ]
-#   sup_msk: ["./data/VISION24/SegmentationClassAug/000377.png",
-            
-             
-#            ]
+# #Wood
+#   sup_rgb: ["./data/VISION24/JPEGImages/000377.jpg"]
+#   sup_msk: ["./data/VISION24/SegmentationClassAug/000377.png"]
 #   qry_rgb: ["./data/VISION24/JPEGImages/000543.jpg",
-#            "./data/VISION24/JPEGImages/000484.jpg",
+#             "./data/VISION24/JPEGImages/000484.jpg",
 #             "./data/VISION24/JPEGImages/000485.jpg",
-#             "./data/VISION24/JPEGImages/000471.jpg",        
-#            ]
+#             "./data/VISION24/JPEGImages/000471.jpg"]
 #   out: results/
-
 
 # p:
 # #Cable_thunderbolt
- 
-
-#   sup_rgb: ["./data/VISION24/JPEGImages/000175.jpg",
-           
-#            ]
-#   sup_msk: ["./data/VISION24/SegmentationClassAug/000175.png",
-            
-             
-#            ]
+#   sup_rgb: ["./data/VISION24/JPEGImages/000175.jpg"]
+#   sup_msk: ["./data/VISION24/SegmentationClassAug/000175.png"]
 #   qry_rgb: ["./data/VISION24/JPEGImages/000015.jpg",
-#            "./data/VISION24/JPEGImages/000218.jpg",
+#             "./data/VISION24/JPEGImages/000218.jpg",
 #             "./data/VISION24/JPEGImages/000167.jpg",
-#             "./data/VISION24/JPEGImages/000253.jpg",        
-#            ]
+#             "./data/VISION24/JPEGImages/000253.jpg"]
 #   out: results/
-
 
 # p:
 # #Cylinder_RCS
-
- 
-
-#   sup_rgb: ["./data/VISION24/JPEGImages/000903.jpg",
-           
-#            ]
-#   sup_msk: ["./data/VISION24/SegmentationClassAug/000903.png",
-            
-             
-#            ]
+#   sup_rgb: ["./data/VISION24/JPEGImages/000903.jpg"]
+#   sup_msk: ["./data/VISION24/SegmentationClassAug/000903.png"]
 #   qry_rgb: ["./data/VISION24/JPEGImages/000860.jpg",
-#            "./data/VISION24/JPEGImages/000955.jpg",
+#             "./data/VISION24/JPEGImages/000955.jpg",
 #             "./data/VISION24/JPEGImages/000926.jpg",
-#             "./data/VISION24/JPEGImages/000878.jpg",        
-#            ]
+#             "./data/VISION24/JPEGImages/000878.jpg"]
 #   out: results/
-
 
 p:
 #PCB_spurious_copper
-
-
- 
-
-  sup_rgb: ["./data/VISION24/JPEGImages/001312.jpg",
-           
-           ]
-  sup_msk: ["./data/VISION24/SegmentationClassAug/001312.png",
-            
-             
-           ]
+  sup_rgb: ["./data/VISION24/JPEGImages/001312.jpg"]
+  sup_msk: ["./data/VISION24/SegmentationClassAug/001312.png"]
   qry_rgb: ["./data/VISION24/JPEGImages/001287.jpg",
-           "./data/VISION24/JPEGImages/001302.jpg",
+            "./data/VISION24/JPEGImages/001302.jpg",
             "./data/VISION24/JPEGImages/001356.jpg",
-            "./data/VISION24/JPEGImages/001291.jpg",        
-           ]
+            "./data/VISION24/JPEGImages/001291.jpg"]
   out: results/
+

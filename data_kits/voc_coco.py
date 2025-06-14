@@ -291,71 +291,65 @@ class SemData(Dataset):
         self.sampler = np.random.RandomState(seed) \
             if self.mode == "train" else np.random.RandomState(test_seed)
 
+
     def sample_tasks(self):
         self.tasks = []
+        support = []  # To track support indices for output
 
         total_length = len(self)
         rounds = (total_length + self.length_data_list - 1) // self.length_data_list
         counter = 0
-        support = []
         for r in range(rounds):
             # Sampling random episodes. Use self.reset_sampler() for fixed sampling orders
-            rng = self.sampler.permutation(np.arange(self.length_data_list)) 
+            rng = self.sampler.permutation(np.arange(self.length_data_list))
             for idx in rng:
                 item = self.data_list[idx]
-                
                 assert len(item[2]) > 0
 
                 cls = self.sampler.choice(item[2])
-                
                 num_files = len(self.sub_cls_files[cls])
-                
-               
                 s_indices = []
-                image_path = ""
+                max_retries = 100  # Prevent infinite loops
                 for i in range(self.shot):
+                    retry_count = 0
                     while True:
-                             
+                        if retry_count >= max_retries:
+                            print(f"Warning: No valid image with pixel value 255 found for class {cls} after {max_retries} attempts")
+                            break  # Exit inner loop if no valid image found
                         s_idx = self.sampler.choice(num_files, size=1)[0]
                         if self.sub_cls_files[cls][s_idx] == item or s_idx in s_indices:
                             continue
-                        
-                        image_path, label_path, _ = self.data_list[s_idx]
-                        image = self.get_image(label_path)
-                        
+                        # Get the image to check for pixel value 255
+                        image_path = "data/" + str(self.data_list[s_idx][1])  # Prepend 'data/' to match test.py
+                        try:
+                            image = Image.open(image_path).convert('L')  # Convert to grayscale
+                            img_np = np.array(image)
+                            if (img_np == 255).any():  # Check if any pixel is 255
+                                s_indices.append(s_idx)
+                                support.append(s_idx)  # Add to support list
+                                break
+                        except Exception as e:
+                            print(f"Error processing image {image_path}: {e}")
+                            retry_count += 1
+                            continue  # Skip invalid images
+                    if retry_count >= max_retries:
+                        break  # Skip to next idx if no valid image found
+                if len(s_indices) == self.shot:  # Only append task if all shots are valid
+                    self.tasks.append((idx, cls, s_indices))
+                else:
+                    print(f"Skipping task for idx {idx}, class {cls} due to insufficient valid images")
+                    continue
 
-                        img_np = np.array(image)
-                        if not (img_np == 255).any():
-                            continue
-                        else:
-                            s_indices.append(s_idx)
-                            support.append(s_idx)
-                            break
-                            
-                        # for i in range(image.shape[0]):
-                        #     p = image[i]
-                        #     if(np.sum(p)==0):
-                        #         pass
-                        #     else:
-                        #         has_white= True
-                        #         break
-                        # if(has_white):        
-                        #     s_indices.append(s_idx)
-                        #     support.append(s_idx)
-                        # else:
-                        #     continue
-                    
-                self.tasks.append((idx, cls, s_indices))
                 counter += 1
                 if counter >= total_length:
                     break
-        with open('output.txt' , 'w') as wf:
+
+        # Write support image paths to output.txt
+        with open('output.txt', 'w') as wf:
             for x in support:
-                wf.write(str(self.data_list[x][0]) + '\n')
+                wf.write(str(self.data_list[x][1]) + '\n')
         
-        exit(1)
-                
-                
+
        
             
             
