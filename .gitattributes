@@ -1,0 +1,1 @@
+data/pretrained/deit/deit_base_distilled_patch16_384-d0272ac0.pth filter=lfs diff=lfs merge=lfs -text
