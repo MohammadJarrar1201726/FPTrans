@@ -1,10 +1,11 @@
+# %load /kaggle/working/updated_kaggle/configs/vision24_vit.yml
 # %load kaggle/working/FPTrans/configs/vision24_vit.yml
 dataset: VISION24
 backbone: DeiT-B/16-384
 vit_depth: 12
 epochs: 30
 lr: 0.00001
-bs: 16
+bs: 8
 # train_n: 1000
 train_n: 3000
 test_n: 7182
@@ -12,12 +13,12 @@ test_n: 7182
 # train_n: 200
 # test_n: 100
 # log_dir: "vision24"
-#num_workers: 4
+# num_workers: 1
 bg_num: 1
 scale_min: 0.6
 scale_max: 1.4
 pair_lossW: 0.001
-loss: pairwise  # Added to specify pairwise loss
+loss: ce  # Added to specify pairwise loss
 height: 448
 width: 448
 optim: "adam"
@@ -80,5 +81,5 @@ p:
             "./data/VISION24/JPEGImages/001302.jpg",
             "./data/VISION24/JPEGImages/001356.jpg",
             "./data/VISION24/JPEGImages/001291.jpg"]
-  out: results/
+  out: cyclic_results/
 

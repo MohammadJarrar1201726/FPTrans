@@ -1,3 +1,4 @@
+# %load core/base_trainer.py
 # %load kaggle/working/FPTrans/core/base_trainer.py
 import os
 import random
@@ -65,7 +66,7 @@ class BaseEvaluator(object):
         self.logger = logger
         self.device = device
         self.mode = mode
-        if mode not in ["EVAL_ONLINE", "EVAL"]:
+        if mode not in ["EVAL_ONLINE", "EVAL" , "EVAL_CYCLIC"]:
             raise ValueError(f"Not supported evaluation mode {mode}. [EVAL_ONLINE, EVAL]")
         self.num_devices = torch.cuda.device_count()
 
@@ -83,10 +84,13 @@ class BaseEvaluator(object):
         # else:
         #     self.model_T = None
         #     self.model_T_DP = None
-        
+
         self.loss_obj = loss_utils.get(opt, logger, loss=opt.loss.replace('dt', ''))
         self.need_grad = need_grad
 
+    def get_accumulator_keys(self):
+        """Return the list of metric keys that this evaluator will produce."""
+        return ['loss']
     def test_step(self, batch, step):
         raise NotImplementedError
 
@@ -119,8 +123,10 @@ class BaseEvaluator(object):
             save_dir = Path(self.opt.save_dir)
             save_dir.mkdir(parents=True, exist_ok=True)
 
-        fs_metric = FewShotMetric(num_classes)    
-        accu = Accumulator(loss=0)
+        accu = Accumulator(**{key: 0.0 for key in self.get_accumulator_keys()})
+
+        fs_metric = FewShotMetric(num_classes)
+        # accu = Accumulator(loss=0)
         data_loader.dataset.sample_tasks()
 
         gen = data_loader
@@ -168,7 +174,7 @@ class BaseEvaluator(object):
             self.logger.info('│' + pad(str3, ' ', max_length) + '│')
             self.logger.info('╘' + pad('', '═', max_length) + '╛')
 
-        return accu.mean('loss'), miou_avg, biou_avg, timer.elapsed, data_timer.elapsed , catch_rate, yeild_rate
+        return accu.mean('loss'), miou_avg, biou_avg, timer.elapsed, data_timer.elapsed  , _, _ , catch_rate, yeild_rate
 
 
 class BaseTrainer(object):
@@ -253,9 +259,9 @@ class BaseTrainer(object):
                 fmt_str += name + ": {:.4f} "
             fmt_str += "[SPD: {:.2f}]"
             print_str = fmt_str.format(
-                epoch, self.opt.epochs, 
-                iters, self.steps_per_epoch, 
-                *accu.mean(self.loss_names), 
+                epoch, self.opt.epochs,
+                iters, self.steps_per_epoch,
+                *accu.mean(self.loss_names),
                 timer.spc + data_timer.spc,
             )
             self.logger.info(print_str)
@@ -271,7 +277,7 @@ class BaseTrainer(object):
 
         for epoch in range(start_epoch, self.opt.epochs + 1):
             self.print_lr()
-            
+
             # Load previous epoch weights if available
             # if(self.opt.dataset == "VISION24"):
             #     checkpoint_path = os.path.join("vision24", f"epoch_{epoch-1}.pth")
@@ -281,7 +287,7 @@ class BaseTrainer(object):
             #         self.model.load_state_dict(checkpoint['model_state_dict'])
             #         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             #         accu.update(**checkpoint['accu'])  # Restore accumulated loss
-            
+
 
             # 1. Training
             self.model.train()
@@ -304,11 +310,11 @@ class BaseTrainer(object):
             if self.opt.ckpt_interval > 0 and epoch % self.opt.ckpt_interval == 0 or epoch == self.opt.epochs:
                 mloss, miou, biou, val_elapsed, val_data_elapsed , catch_rate ,yeild_rate = evaluator.start_eval_loop(self.data_loader_val, num_classes, epoch)
                 best = self.snapshot(epoch, miou, biou)
-                
+
                 data_time = data_timer.elapsed + val_data_elapsed
                 epoch_time = timer.elapsed + val_elapsed
                 self.log_result(epoch, accu, mloss, miou, biou, best, epoch_time, data_time , catch_rate , yeild_rate)
-                
+
             # Save model checkpoint after every epoch
             # if(self.opt.dataset == "VISION24"):
             #     checkpoint_path = os.path.join('vision24', f"epoch_{epoch}.pth")
@@ -375,7 +381,7 @@ class BaseTrainer(object):
 
         if best:
             shutil.copyfile(save_path, self.log_dir / "bestckpt.pth")
-        
+
         # Make a copy when oncloud
         if on_cloud:
             state.update({
@@ -395,7 +401,7 @@ class BaseTrainer(object):
                 torch.save(state, on_cloud_save_path)
             except Exception as e:
                 print(e)
-            
+
             if best:
                 try:
                     on_cloud_save_path_best = self.cloud_save_dir / "bestckpt.pth"
@@ -410,18 +416,18 @@ class BaseTrainer(object):
         # Log epoch summary to the terminal
         losses = accu.mean('loss')
         log_str = self.template.format(
-            epoch, 
-            self.opt.epochs, 
-            losses, 
-            val_loss, 
-            val_mIoU * 100, 
-            val_bIoU * 100, 
+            epoch,
+            self.opt.epochs,
+            losses,
+            val_loss,
+            val_mIoU * 100,
+            val_bIoU * 100,
             self.second2str(data_time),
             self.second2str(epoch_time),
             self.second2str((self.opt.epochs - epoch) * epoch_time),
             catch_rate * 100,
             yeild_rate * 100
-            
+
         ) + " | (best)" * best
         self.logger.info(log_str)
         self.logger.info(CC.c(f"[{epoch}/{self.opt.epochs}] Best mIoU until now: {self.best_iou * 100:.2f}\n", CC.OKGREEN))
@@ -434,4 +440,4 @@ class BaseTrainer(object):
         self.run.log_scalar('val_bIoU', float(val_bIoU), epoch)
         for k, v in kwargs.items():
             self.run.log_scalar(k, float(v), epoch)
-    
+
