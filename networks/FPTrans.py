@@ -430,12 +430,20 @@ class FPTrans(nn.Module):
             pos_embed_model = model_state_dict['encoder.backbone.pos_embed']
             if pos_embed_ckpt.shape != pos_embed_model.shape:
                 gs_new = self.encoder.backbone.patch_embed.grid_size  # e.g., (24, 24)
+                if gs_new != (30, 30):
+                    logger.warning(f"Expected gs_new=(30, 30) for 480x480, got {gs_new}")
                 num_tokens_model = self.encoder.backbone.num_tokens  # e.g., 2
-                weights['encoder.backbone.pos_embed'] = vit.resize_pos_embed(
-                    pos_embed_ckpt, pos_embed_model, num_tokens_model, gs_new
+                # weights['encoder.backbone.pos_embed'] = vit.resize_pos_embed(
+                #     pos_embed_ckpt, pos_embed_model, num_tokens_model, gs_new
+                # )
+                gs_new_h = gs_new_w = 480 // 16  # 30 for 480x480
+                num_tokens = 1  # Standard DeiT (or 2 for distilled)
+                print(f"Resizing pos_embed: input shape {ckpt['pos_embed'].shape}, gs_new_h={gs_new_h}, gs_new_w={gs_new_w}, num_tokens={num_tokens}")
+                ckpt['pos_embed'] = resize_pos_embed(
+                    ckpt['pos_embed'], gs_new_h=gs_new_h, gs_new_w=gs_new_w, num_tokens=num_tokens
                 )
-                logger.info(f"Resized pos_embed from {pos_embed_ckpt.shape} to {pos_embed_model.shape}")
-    
+                print(f"Resized pos_embed shape: {ckpt['pos_embed'].shape}")
+                
         # Filter weights to only include keys that match the model’s state_dict in both name and shape
         filtered_weights = {
             k: v for k, v in weights.items()

@@ -230,7 +230,7 @@ class VisionTransformer(nn.Module):
         - https://arxiv.org/abs/2012.12877
     """
 
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
+    def __init__(self, img_size=480, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  pretrained="",
                  num_heads=12, mlp_ratio=4., qkv_bias=True, representation_size=None, distilled=False,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0., embed_layer=utils.PatchEmbed, norm_layer=None,
@@ -583,25 +583,54 @@ def _load_weights_pth(logger, model: VisionTransformer, checkpoint_path):
     model.load_state_dict(state_dict, strict=True)
 
 
-def resize_pos_embed(posemb, posemb_new, num_tokens=1, gs_new=()):
-    # Rescale the grid of position embeddings when loading from state_dict. Adapted from
-    # https://github.com/google-research/vision_transformer/blob/00883dd691c63a6830751563748663526e811cee/vit_jax/checkpoint.py#L224
-    _logger.info(' ' * 5 + '==> Resized position embedding: %s to %s', posemb.shape, posemb_new.shape)
-    ntok_new = posemb_new.shape[1]
-    if num_tokens:
-        posemb_tok, posemb_grid = posemb[:, :num_tokens], posemb[0, num_tokens:]
-        ntok_new -= num_tokens
-    else:
-        posemb_tok, posemb_grid = posemb[:, :0], posemb[0]
-    gs_old = int(math.sqrt(len(posemb_grid)))
-    if not len(gs_new):  # backwards compatibility
-        gs_new = [int(math.sqrt(ntok_new))] * 2
-    assert len(gs_new) >= 2
-    _logger.info(' ' * 5 + '==> Position embedding grid-size from %s to %s', [gs_old, gs_old], gs_new)
+def resize_pos_embed(posemb, gs_new_h, gs_new_w, num_tokens=1):
+    """
+    Resize positional embeddings from old grid size to new grid size.
+    
+    Args:
+        posemb: Input positional embedding tensor [1, N, D]
+        gs_new_h: New grid height (e.g., 30 for 480x480 with patch size 16)
+        gs_new_w: New grid width (e.g., 30 for 480x480 with patch size 16)
+        num_tokens: Number of non-grid tokens (e.g., 1 for class token)
+    
+    Returns:
+        Resized positional embedding tensor [1, M, D]
+    """
+    if not isinstance(num_tokens, int):
+        _logger.warning(f"num_tokens must be an integer, got {type(num_tokens)}: {num_tokens}. Defaulting to 1.")
+        num_tokens = 1
+    
+    if not isinstance(gs_new_h, int) or not isinstance(gs_new_w, int):
+        raise TypeError(f"gs_new_h and gs_new_w must be integers, got {gs_new_h}, {gs_new_w}")
+    
+    _logger.info(' ' * 5 + '==> Resizing position embedding from %s to grid size %dx%d', 
+                 posemb.shape, gs_new_h, gs_new_w)
+    
+    # Separate class token (if any) and grid tokens
+    posemb_tok = posemb[:, :num_tokens]  # [1, num_tokens, D]
+    posemb_grid = posemb[:, num_tokens:]  # [1, N, D], N = old grid size
+    
+    # Compute old grid size
+    ntok_old = posemb_grid.shape[1]
+    gs_old = int(math.sqrt(ntok_old))
+    if gs_old * gs_old != ntok_old:
+        raise ValueError(f"Positional embedding grid size {ntok_old} is not a perfect square")
+    
+    # Reshape grid to [1, D, gs_old, gs_old]
     posemb_grid = posemb_grid.reshape(1, gs_old, gs_old, -1).permute(0, 3, 1, 2)
-    posemb_grid = F.interpolate(posemb_grid, size=gs_new, mode='bicubic', align_corners=False)
-    posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, gs_new[0] * gs_new[1], -1)
+    
+    # Resize to new grid size using bicubic interpolation
+    posemb_grid = F.interpolate(
+        posemb_grid, size=(gs_new_h, gs_new_w), mode='bicubic', align_corners=False
+    )
+    
+    # Reshape back to [1, gs_new_h * gs_new_w, D]
+    posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, gs_new_h * gs_new_w, -1)
+    
+    # Concatenate class token (if any) and grid
     posemb = torch.cat([posemb_tok, posemb_grid], dim=1)
+    
+    _logger.info(' ' * 5 + '==> Resized position embedding to %s', posemb.shape)
     return posemb
 
 

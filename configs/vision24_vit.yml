@@ -19,8 +19,10 @@ scale_min: 0.6
 scale_max: 1.4
 pair_lossW: 0.001
 loss: ce  # Added to specify pairwise loss
-height: 448
-width: 448
+#height: 448
+#width: 448
+height: 480
+width: 480
 optim: "adam"
 shot: 1
 split: 0     # Dataset split to use
