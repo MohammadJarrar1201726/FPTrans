@@ -1,4 +1,4 @@
-# FPTrans: Feature-Proxy Transformer for Few-Shot Segmentation
+# FPTrans: Feature-Proxy Transformer for Few-Shot Segmentation Applied for Industrial Defect Segmentation
 
 [Jian-Wei Zhang](https://github.com/Jarvis73), Yifan Sun, Yi Yang, Wei Chen
 
