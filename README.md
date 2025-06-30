@@ -8,6 +8,9 @@ This repository is the **PyTorch** Implementation. One can find the PaddlePaddle
 
 ![Framework](./assets/framework.png)
 
+
+## Defect Segmentation Testing Phase
+![One Shot Defect Segmentation](TestData.png)
 ## Installation
 
 Create a virtual environment and install the required packages.
@@ -44,8 +47,6 @@ See [Preparing Datasets and Pretrained Backbones for FPTrans](./data/README.md)
 
 ### Usage for inference with our pretrained models
 
-Download the checkpoints of our pretrained FPTrans from [GoogleDrive](https://drive.google.com/drive/folders/1leK51aSPhw7kTJzwCY1ApcMJ5JG9K2Mv?usp=share_link) or [BaiduDrive](https://pan.baidu.com/s/1v4PJJAe4EG1OwFnliAHEyQ) (Code: FPTr),
-and put the pretrained models (the numbered folders) into `./output/`.
 
 | Datasets  | Backbone  | #Shots |
 |:---------:|:---------:|:------:|
